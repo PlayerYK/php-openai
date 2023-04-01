@@ -56,7 +56,7 @@ class ChatGPT {
     	$json = json_encode([
     	    'model' => 'gpt-3.5-turbo',
     	    'messages' => $messages,
-    	    'temperature' => 0.6,
+    	    'temperature' => $params['temperature'] ?? 0.8,
     	    'stream' => true,
     	]);
 

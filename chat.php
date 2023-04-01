@@ -52,12 +52,20 @@ if(empty($question)) {
     flush();
     exit();
 }
+
 $question = str_ireplace('{[$add$]}', '+', $question);
 
 
+// 从配置文件 config.ini 加载 OpenAI api_key
+if (!$settings = parse_ini_file('./config.ini', TRUE)){
+    echo "Server Error: Unable to open config".PHP_EOL.PHP_EOL;
+    flush();
+    exit();
+}
+
 // 此处需要填入 openai 的 api key 
 $chat = new ChatGPT([
-    'api_key' => '',
+    'api_key' => $settings['openai']['api_key'],
 ]);
 
 /*
@@ -73,4 +81,5 @@ $chat->set_dfa($dfa);
 $chat->qa([
 	'system' => '你是一个智能机器人',
 	'question' => $question,
+    'temperature' => 0.9
 ]);

@@ -51,11 +51,9 @@
 
 唯二要做的就是把你自己的 api key 填进去。
 
-获取源码后，修改 `chat.php` ，填写 OpenAI 的 api key 进去，具体请见：
-```php
-$chat = new ChatGPT([
-    'api_key' => '此处需要填入 openai 的 api key ',
-]);
+获取源码后，修改文件 `config.sample.ini` 为 `config.ini`，填写 OpenAI 的 api key 进去，具体请见：
+```ini
+api_key=sk-xxxxx
 ```
 
 如果开启敏感词检测功能，需要把敏感词一行一个放入 `sensitive_words_sdfdsfvdfs5v56v5dfvdf.txt` 文件中。
