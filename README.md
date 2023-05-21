@@ -2,6 +2,13 @@
 
 由 [@qiayue](https://github.com/qiayue/) 开源的 [纯 PHP 实现 GPT 流式调用和前端实时打印 webui ](https://github.com/qiayue/php-openai-gpt-stream-chat-api-webui) 。
 
+**4月13日更新：**
+
+1、最近速度慢是因为 OpenAI 对于免费账号限速了，在 [platform.openai.com](https://platform.openai.com/) 绑定了信用卡的才是之前的正常速度；
+
+2、限速指的是流式请求时，首个 token 返回需要 20 秒左右，而绑定了信用卡的账号，在 2 秒左右；
+
+
 ## 目录结构
 
 ```
@@ -60,7 +67,7 @@ api_key=sk-xxxxx
 
 开了一个微信群，欢迎入群交流：
 
-![微信答疑群](https://tlc.nali.net/qrcode/wxgroup/openaiqa/?v=1)
+![微信答疑群](https://raw.githubusercontent.com/qiayue/php-openai-gpt-stream-chat-api-webui/main/static/img/wxqrcode.0420.jpeg)
 
 
 ## 原理说明
@@ -104,6 +111,9 @@ public function callback($ch, $data) {
 
         // 0、把上次缓冲区内数据拼接上本次的data
         $buffer = $this->data_buffer.$data;
+
+        //拼接完之后，要把缓冲字符串清空
+        $this->data_buffer = '';
 
         // 1、把所有的 'data: {' 替换为 '{' ，'data: [' 换成 '['
         $buffer = str_replace('data: {', '{', $buffer);

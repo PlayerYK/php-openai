@@ -50,14 +50,17 @@ class StreamHandler {
 
         // 0、把上次缓冲区内数据拼接上本次的data
         $buffer = $this->data_buffer.$data;
+        
+        //拼接完之后，要把缓冲字符串清空
+        $this->data_buffer = '';
 
         // 1、把所有的 'data: {' 替换为 '{' ，'data: [' 换成 '['
         $buffer = str_replace('data: {', '{', $buffer);
         $buffer = str_replace('data: [', '[', $buffer);
 
         // 2、把所有的 '}\n\n{' 替换维 '}[br]{' ， '}\n\n[' 替换为 '}[br]['
-        $buffer = str_replace('}'.PHP_EOL.PHP_EOL.'{', '}[br]{', $buffer);
-        $buffer = str_replace('}'.PHP_EOL.PHP_EOL.'[', '}[br][', $buffer);
+        $buffer = str_replace("}\n\n{", '}[br]{', $buffer);
+        $buffer = str_replace("}\n\n[", '}[br][', $buffer);
 
         // 3、用 '[br]' 分割成多行数组
         $lines = explode('[br]', $buffer);
