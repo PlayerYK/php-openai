@@ -4,6 +4,7 @@ class ChatGPT {
 
     private $api_url = '';
 	private $api_key = '';
+	private $api_model = '';
 	private $streamHandler;
 	private $question;
     private $dfa = NULL;
@@ -12,6 +13,7 @@ class ChatGPT {
 	public function __construct($params) {
         $this->api_key = $params['api_key'] ?? '';
         $this->api_url = $params['api_url'] ?? 'https://api.openai.com/v1/chat/completions';
+        $this->api_model = $params['api_model'] ?? 'gpt-3.5-turbo-0613';
     }
 
     public function set_dfa(&$dfa){
@@ -55,7 +57,7 @@ class ChatGPT {
     	];
 
     	$json = json_encode([
-    	    'model' => 'gpt-3.5-turbo',
+    	    'model' => $this->api_model,
     	    'messages' => $messages,
     	    'temperature' => $params['temperature'] ?? 0.8,
     	    'stream' => true,
