@@ -66,6 +66,7 @@ if (!$settings = parse_ini_file('./config.ini', TRUE)){
 // 此处需要填入 openai 的 api key 
 $chat = new ChatGPT([
     'api_key' => $settings['openai']['api_key'],
+    'api_url' => $settings['openai']['api_url'],
 ]);
 
 /*

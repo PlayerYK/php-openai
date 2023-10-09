@@ -2,7 +2,7 @@
 
 class ChatGPT {
 
-    private $api_url = 'https://api.openai.com/v1/chat/completions';
+    private $api_url = '';
 	private $api_key = '';
 	private $streamHandler;
 	private $question;
@@ -11,6 +11,7 @@ class ChatGPT {
 
 	public function __construct($params) {
         $this->api_key = $params['api_key'] ?? '';
+        $this->api_url = $params['api_url'] ?? 'https://api.openai.com/v1/chat/completions';
     }
 
     public function set_dfa(&$dfa){
