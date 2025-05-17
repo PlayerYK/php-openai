@@ -29,9 +29,4 @@
 -   **配置文件**: `config.ini` (在 `[security]` 部分)
 -   **参考文件**: `config.sample.ini`
 
-## 5. 前端集成 (Frontend Integration)
-
--   **相关文件**: `static/js/chat.js`
--   **功能**: 添加了对API Token的支持，以便客户端（如Chrome扩展）能够获取并使用认证Token。
-
 通过以上措施，可以有效提升API的安全性，防止恶意调用和资源滥用。 
