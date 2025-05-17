@@ -58,6 +58,31 @@ class ApiAuth {
         $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
         $ipAddress = $this->getClientIp();
         
+        // 增强调试日志
+        $debugInfo = [
+            'time' => date('Y-m-d H:i:s'),
+            'headers' => $headers,
+            'token' => $token,
+            'referer' => $referer,
+            'origin' => $origin,
+            'user_agent' => $userAgent,
+            'ip' => $ipAddress,
+            'valid_referers' => $this->validReferers,
+            'valid_origins' => $this->validOrigins,
+            'enable_referer_auth' => $this->enableRefererAuth,
+            'enable_origin_auth' => $this->enableOriginAuth,
+            'enable_strict_mode' => $this->enableStrictMode
+        ];
+        
+        // 调试日志目录
+        $debugDir = './log/debug/auth/';
+        if (!file_exists($debugDir)) {
+            mkdir($debugDir, 0755, true);
+        }
+        
+        file_put_contents($debugDir . 'auth_' . date('Y-m-d_H-i-s') . '.json', 
+            json_encode($debugInfo, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+        
         // 记录请求信息
         if ($this->enableLogging) {
             $this->logRequest([
@@ -93,7 +118,7 @@ class ApiAuth {
             
             if (!$isValidReferer) {
                 if ($this->enableLogging) {
-                    $this->logFailure('Invalid referer', $ipAddress);
+                    $this->logFailure('Invalid referer: ' . $referer, $ipAddress);
                 }
                 $isValid = false;
             }
@@ -102,7 +127,7 @@ class ApiAuth {
         // 如果启用了Origin验证，则进行验证
         if ($isValid && $this->enableOriginAuth && !empty($this->validOrigins) && !in_array($origin, $this->validOrigins)) {
             if ($this->enableLogging) {
-                $this->logFailure('Invalid origin', $ipAddress);
+                $this->logFailure('Invalid origin: ' . $origin, $ipAddress);
             }
             $isValid = false;
         }

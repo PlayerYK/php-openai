@@ -28,10 +28,26 @@ class StreamHandler {
 
     public function callback($ch, $data) {
         $this->counter += 1;
+        
+        // 增强调试目录
+        $debugDir = './log/debug/stream/';
+        if (!file_exists($debugDir)) {
+            mkdir($debugDir, 0755, true);
+        }
+        
+        // 记录每次回调收到的原始数据
+        file_put_contents($debugDir . 'raw_data_' . $this->qmd5 . '_' . $this->counter . '.log', 
+            '数据长度: ' . strlen($data) . PHP_EOL . 
+            '内容: ' . $data . PHP_EOL . 
+            '--------------------' . PHP_EOL);
+            
         file_put_contents('./log/data.'.$this->qmd5.'.log', $this->counter.'=='.$data.PHP_EOL.'--------------------'.PHP_EOL, FILE_APPEND);
 
         $result = json_decode($data, TRUE);
         if(is_array($result)){
+            // 记录错误响应
+            file_put_contents($debugDir . 'error_response_' . $this->qmd5 . '.json', 
+                json_encode($result, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
         	$this->end('openai 请求错误：'.json_encode($result));
         	return strlen($data);
         }
@@ -65,6 +81,15 @@ class StreamHandler {
         // 3、用 '[br]' 分割成多行数组
         $lines = explode('[br]', $buffer);
 
+        // 记录处理后的数据
+        file_put_contents($debugDir . 'processed_data_' . $this->qmd5 . '_' . $this->counter . '.json', 
+            json_encode([
+                'original_data_length' => strlen($data),
+                'buffer_length' => strlen($buffer),
+                'lines_count' => count($lines),
+                'lines' => $lines
+            ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+
         // 4、循环处理每一行，对于最后一行需要判断是否是完整的json
         $line_c = count($lines);
         foreach($lines as $li=>$line){
@@ -84,6 +109,11 @@ class StreamHandler {
                     break;
                 }
                 //如果是中间行无法json解析，则写入错误日志中
+                file_put_contents($debugDir . 'parse_error_' . $this->qmd5 . '_' . $this->counter . '_' . $li . '.log',
+                    json_encode([
+                        'line' => $line,
+                        'error' => json_last_error_msg()
+                    ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
                 file_put_contents('./log/error.'.$this->qmd5.'.log', json_encode(['i'=>$this->counter, 'line'=>$line, 'li'=>$li], JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT).PHP_EOL.PHP_EOL, FILE_APPEND);
                 continue;
             }

@@ -94,7 +94,25 @@ class ChatGPT {
     }
 
     private function openai($json, $headers){
-    	$ch = curl_init();
+        // 调试日志
+        $debugDir = './log/debug/api/';
+        if (!file_exists($debugDir)) {
+            mkdir($debugDir, 0755, true);
+        }
+        
+        // 记录发送到OpenAI的请求
+        $requestDebug = [
+            'time' => date('Y-m-d H:i:s'),
+            'api_url' => $this->api_url,
+            'api_model' => $this->api_model,
+            'request_json' => json_decode($json, true),
+            'headers' => $headers
+        ];
+        
+        file_put_contents($debugDir . 'openai_request_' . date('Y-m-d_H-i-s') . '.json', 
+            json_encode($requestDebug, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+    	
+        $ch = curl_init();
 
     	curl_setopt($ch, CURLOPT_URL, $this->api_url);
     	curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -106,15 +124,29 @@ class ChatGPT {
     	curl_setopt($ch, CURLOPT_POSTFIELDS, $json);
     	curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 
+        // 增加更多curl调试选项
+        curl_setopt($ch, CURLOPT_VERBOSE, true);
+        $verbose = fopen($debugDir . 'curl_verbose_' . date('Y-m-d_H-i-s') . '.log', 'w+');
+        curl_setopt($ch, CURLOPT_STDERR, $verbose);
+
     	curl_setopt($ch, CURLOPT_WRITEFUNCTION, [$this->streamHandler, 'callback']);
 
     	$response = curl_exec($ch);
 
     	if (curl_errno($ch)) {
-    	    $this->logError('CURL error: ' . curl_error($ch));
-    	    file_put_contents('./log/curl.error.log', curl_error($ch).PHP_EOL.PHP_EOL, FILE_APPEND);
+            $error = 'CURL error: ' . curl_error($ch) . ' (Code: ' . curl_errno($ch) . ')';
+            $this->logError($error);
+            
+            // 记录更多curl信息
+            $curlInfo = curl_getinfo($ch);
+            file_put_contents($debugDir . 'curl_error_' . date('Y-m-d_H-i-s') . '.json', 
+                json_encode([
+                    'error' => $error,
+                    'curl_info' => $curlInfo
+                ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
     	}
 
+        fclose($verbose);
     	curl_close($ch);
     }
     

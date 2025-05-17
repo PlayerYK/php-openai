@@ -3,6 +3,28 @@
 // 设置时区为东八区
 date_default_timezone_set('PRC');
 
+// 添加全局请求信息记录（调试用）
+$debug_dir = './log/debug/';
+if (!file_exists($debug_dir)) {
+    mkdir($debug_dir, 0755, true);
+}
+
+// 记录所有请求头和参数信息
+$debug_log = [
+    'time' => date('Y-m-d H:i:s'),
+    'request_uri' => $_SERVER['REQUEST_URI'] ?? '',
+    'query_string' => $_SERVER['QUERY_STRING'] ?? '',
+    'http_referer' => $_SERVER['HTTP_REFERER'] ?? '',
+    'http_origin' => $_SERVER['HTTP_ORIGIN'] ?? '',
+    'http_user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? '',
+    'remote_addr' => $_SERVER['REMOTE_ADDR'] ?? '',
+    'all_headers' => function_exists('getallheaders') ? getallheaders() : [],
+    'get_params' => $_GET,
+    'post_params' => $_POST
+];
+
+file_put_contents($debug_dir . 'request_' . date('Y-m-d_H-i-s') . '.log', 
+    json_encode($debug_log, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
 
 /*
 以下几行比较长的注释由 GPT4 生成
