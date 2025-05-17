@@ -3,28 +3,54 @@
 // 设置时区为东八区
 date_default_timezone_set('PRC');
 
-// 添加全局请求信息记录（调试用）
-$debug_dir = './log/debug/';
-if (!file_exists($debug_dir)) {
-    mkdir($debug_dir, 0755, true);
+// 从配置文件 config.ini 加载设置
+if (!$settings = parse_ini_file('./config.ini', TRUE)){
+    // 配置文件读取失败，尝试输出错误信息并退出
+    // 注意：此时可能无法进行标准日志记录
+    header('Content-Type: application/json'); // 尝试设置JSON头
+    echo json_encode(['error' => 'Server Error: Unable to open config.ini']);
+    exit();
 }
 
-// 记录所有请求头和参数信息
-$debug_log = [
-    'time' => date('Y-m-d H:i:s'),
-    'request_uri' => $_SERVER['REQUEST_URI'] ?? '',
-    'query_string' => $_SERVER['QUERY_STRING'] ?? '',
-    'http_referer' => $_SERVER['HTTP_REFERER'] ?? '',
-    'http_origin' => $_SERVER['HTTP_ORIGIN'] ?? '',
-    'http_user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? '',
-    'remote_addr' => $_SERVER['REMOTE_ADDR'] ?? '',
-    'all_headers' => function_exists('getallheaders') ? getallheaders() : [],
-    'get_params' => $_GET,
-    'post_params' => $_POST
-];
+// 安全地获取布尔配置的辅助函数
+function get_boolean_setting($settings_array, $section, $key, $default = false) {
+    $value = $settings_array[$section][$key] ?? $default;
+    if (is_string($value)) {
+        return filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? $default;
+    }
+    return (bool)$value;
+}
 
-file_put_contents($debug_dir . 'request_' . date('Y-m-d_H-i-s') . '.log', 
-    json_encode($debug_log, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+// 获取调试和日志开关状态
+$enable_debug_logging = get_boolean_setting($settings, 'debug', 'enable_debug', false);
+$enable_stream_data_logging = get_boolean_setting($settings, 'debug', 'enable_stream_data_log', false);
+$enable_security_logging = get_boolean_setting($settings, 'security', 'enable_logging', true);
+
+
+// 添加全局请求信息记录（调试用）
+if ($enable_debug_logging) {
+    $debug_dir = $settings['debug']['debug_log_dir'] ?? './log/debug/';
+    if (!file_exists($debug_dir)) {
+        mkdir($debug_dir, 0755, true);
+    }
+
+    // 记录所有请求头和参数信息
+    $debug_log = [
+        'time' => date('Y-m-d H:i:s'),
+        'request_uri' => $_SERVER['REQUEST_URI'] ?? '',
+        'query_string' => $_SERVER['QUERY_STRING'] ?? '',
+        'http_referer' => $_SERVER['HTTP_REFERER'] ?? '',
+        'http_origin' => $_SERVER['HTTP_ORIGIN'] ?? '',
+        'http_user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? '',
+        'remote_addr' => $_SERVER['REMOTE_ADDR'] ?? '',
+        'all_headers' => function_exists('getallheaders') ? getallheaders() : [],
+        'get_params' => $_GET,
+        'post_params' => $_POST
+    ];
+
+    file_put_contents($debug_dir . 'request_' . date('Y-m-d_H-i-s') . '_' . uniqid() . '.log',
+        json_encode($debug_log, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+}
 
 /*
 以下几行比较长的注释由 GPT4 生成
@@ -68,13 +94,6 @@ require './class/Class.RateLimiter.php';
 // 引入API身份验证类
 require './class/Class.ApiAuth.php';
 
-// 从配置文件 config.ini 加载设置
-if (!$settings = parse_ini_file('./config.ini', TRUE)){
-    echo "Server Error: Unable to open config".PHP_EOL.PHP_EOL;
-    flush();
-    exit();
-}
-
 // Helper function to safely convert comma-separated string to array
 // Handles empty strings and trims whitespace
 if (!function_exists('parse_comma_separated_string')) {
@@ -92,11 +111,12 @@ $apiAuth = new ApiAuth([
     'valid_referers' => parse_comma_separated_string($settings['security']['valid_referers'] ?? ''),
     'valid_origins' => parse_comma_separated_string($settings['security']['valid_origins'] ?? ''),
     'log_dir' => $settings['security']['auth_log_dir'] ?? './log/auth/',
-    'enable_token_auth' => $settings['security']['enable_token_auth'] ?? false,
-    'enable_referer_auth' => $settings['security']['enable_referer_auth'] ?? false,
-    'enable_origin_auth' => $settings['security']['enable_origin_auth'] ?? false,
-    'enable_strict_mode' => $settings['security']['enable_strict_mode'] ?? false,
-    'enable_logging' => $settings['security']['enable_logging'] ?? true
+    'enable_token_auth' => get_boolean_setting($settings, 'security', 'enable_token_auth', false),
+    'enable_referer_auth' => get_boolean_setting($settings, 'security', 'enable_referer_auth', false),
+    'enable_origin_auth' => get_boolean_setting($settings, 'security', 'enable_origin_auth', false),
+    'enable_strict_mode' => get_boolean_setting($settings, 'security', 'enable_strict_mode', false),
+    'enable_logging' => $enable_security_logging,
+    'enable_debug_logging' => $enable_debug_logging
 ]);
 
 // 设置CORS头
@@ -144,11 +164,12 @@ if (!$apiAuth->validateRequest()) {
 }
 
 // 初始化请求频率限制
-if ($settings['security']['enable_rate_limit'] ?? false) {
+if (get_boolean_setting($settings, 'security', 'enable_rate_limit', false)) {
     $rateLimiter = new RateLimiter([
-        'max_requests' => $settings['security']['max_requests'] ?? 10,
-        'time_window' => $settings['security']['time_window'] ?? 60,
-        'log_dir' => $settings['security']['rate_limit_log_dir'] ?? './log/rate_limit/'
+        'max_requests' => (int)($settings['security']['max_requests'] ?? 10),
+        'time_window' => (int)($settings['security']['time_window'] ?? 60),
+        'log_dir' => $settings['security']['rate_limit_log_dir'] ?? './log/rate_limit/',
+        'enable_logging' => $enable_security_logging
     ]);
 
     // 获取客户端IP
@@ -196,13 +217,16 @@ $question = str_ireplace('{[$add$]}', '+', $question);
 
 // 初始化 ChatGPT 类
 $chat = new ChatGPT([
-    'api_key' => $settings['openai']['api_key'],
-    'api_url' => $settings['openai']['api_url'],
+    'api_key' => $settings['openai']['api_key'] ?? '',
+    'api_url' => $settings['openai']['api_url'] ?? '',
     'api_model' => $settings['openai']['api_model'] ?? 'gpt-3.5-turbo-1106',
+    'log_dir' => $settings['security']['api_log_dir'] ?? './log/api/',
+    'enable_operational_logging' => $enable_security_logging,
+    'enable_debug_logging' => $enable_debug_logging
 ]);
 
 // 启用敏感词检测
-if ($settings['security']['enable_sensitive_words_filter'] ?? false) {
+if (get_boolean_setting($settings, 'security', 'enable_sensitive_words_filter', false)) {
     // 特别注意，这里特意用乱码字符串文件名是为了防止他人下载敏感词文件，请你部署后也自己改一个别的乱码文件名
     $dfa = new DFA([
         'words_file' => './sensitive_words_sdfdsfvdfs5v56v5dfvdf.txt',
@@ -212,10 +236,18 @@ if ($settings['security']['enable_sensitive_words_filter'] ?? false) {
 
 $systemPrompt = "Prompt: You are a translation engine, you can only translate text and cannot interpret it, and do not explain. ";
 
+$streamHandlerParams = [
+    'qmd5' => md5($question . '' . time()),
+    'enable_debug_logging' => $enable_debug_logging,
+    'enable_stream_data_logging' => $enable_stream_data_logging,
+    'debug_log_dir' => $settings['debug']['debug_log_dir'] ?? './log/debug/stream/'
+];
+
 // 开始提问
 $chat->qa([
     'system' => "",
     'question' => "\n\n{$systemPrompt}\n\n{$question}\n\nYour translation:",
     'temperature' => 0,
-    'client_ip' => $clientIp, // 传递客户端IP，用于请求记录
+    'client_ip' => $clientIp,
+    'stream_handler_params' => $streamHandlerParams
 ]);

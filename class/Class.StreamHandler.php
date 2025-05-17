@@ -10,15 +10,22 @@ class StreamHandler {
     private $dfa = NULL;
     private $check_sensitive = FALSE;
     private $streamHasContent = false; // 新增的成员变量
+    private $enable_debug_logging = false;
+    private $enable_stream_data_logging = false;
+    private $debug_log_dir_stream = './log/debug/stream/'; // Default, can be overridden
 
     public function __construct($params) {
-        $this->buffer = '';
+        $this->data_buffer = '';
         $this->counter = 0;
-        $this->qmd5 = $params['qmd5'] ?? time();
+        $this->qmd5 = $params['qmd5'] ?? md5(time() . uniqid());
         $this->chars = [];
-        $this->lines = [];
         $this->punctuation = ['，', '。', '；', '？', '！', '……'];
-        $this->streamHasContent = false; // 在构造函数中初始化
+        $this->streamHasContent = false;
+
+        $this->enable_debug_logging = $params['enable_debug_logging'] ?? false;
+        $this->enable_stream_data_logging = $params['enable_stream_data_logging'] ?? false;
+        $base_debug_dir = rtrim($params['debug_log_dir'] ?? './log/debug', '/');
+        $this->debug_log_dir_stream = $base_debug_dir . '/stream/';
     }
 
     public function set_dfa(&$dfa){
@@ -31,35 +38,41 @@ class StreamHandler {
     public function callback($ch, $data) {
         $this->counter += 1;
         
-        // 增强调试目录
-        $debugDir = './log/debug/stream/';
-        if (!file_exists($debugDir)) {
-            mkdir($debugDir, 0755, true);
-        }
-        
-        // 记录每次回调收到的原始数据
-        file_put_contents($debugDir . 'raw_data_' . $this->qmd5 . '_' . $this->counter . '.log', 
-            '数据长度: ' . strlen($data) . PHP_EOL . 
-            '内容: ' . $data . PHP_EOL . 
-            '--------------------' . PHP_EOL);
+        if ($this->enable_debug_logging) {
+            if (!file_exists($this->debug_log_dir_stream)) {
+                mkdir($this->debug_log_dir_stream, 0755, true);
+            }
             
-        file_put_contents('./log/data.'.$this->qmd5.'.log', $this->counter.'=='.$data.PHP_EOL.'--------------------'.PHP_EOL, FILE_APPEND);
+            file_put_contents($this->debug_log_dir_stream . 'raw_data_' . $this->qmd5 . '_' . $this->counter . '_' . uniqid() . '.log', 
+                '数据长度: ' . strlen($data) . PHP_EOL . 
+                '内容: ' . $data . PHP_EOL . 
+                '--------------------' . PHP_EOL);
+        }
+            
+        if ($this->enable_stream_data_logging) {
+            if (!file_exists('./log/')) {
+                mkdir('./log/', 0755, true);
+            }
+            file_put_contents('./log/data.'.$this->qmd5.'.log', $this->counter.'=='.$data.PHP_EOL.'--------------------'.PHP_EOL, FILE_APPEND);
+        }
 
-        // 检查流数据是否为空或无效
         if (empty(trim($data))) {
-            file_put_contents($debugDir . 'empty_data_' . $this->qmd5 . '_' . $this->counter . '.log', 
-                '警告: 接收到空数据' . PHP_EOL);
+            if ($this->enable_debug_logging) {
+                 if (!file_exists($this->debug_log_dir_stream)) mkdir($this->debug_log_dir_stream, 0755, true);
+                file_put_contents($this->debug_log_dir_stream . 'empty_data_' . $this->qmd5 . '_' . $this->counter . '_' . uniqid() . '.log', 
+                    '警告: 接收到空数据' . PHP_EOL);
+            }
             return strlen($data);
         }
 
-        // 尝试解析整个数据为JSON（可能是错误消息）
         $result = json_decode($data, TRUE);
         if(is_array($result)){
-            // 记录错误响应
-            file_put_contents($debugDir . 'error_response_' . $this->qmd5 . '.json', 
-                json_encode($result, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+            if ($this->enable_debug_logging) {
+                if (!file_exists($this->debug_log_dir_stream)) mkdir($this->debug_log_dir_stream, 0755, true);
+                file_put_contents($this->debug_log_dir_stream . 'error_response_' . $this->qmd5 . '_' . uniqid() . '.json', 
+                    json_encode($result, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+            }
                 
-            // 提取错误信息，如果存在
             $errorMsg = 'OpenAI 请求错误';
             if (isset($result['error']['message'])) {
                 $errorMsg .= ': ' . $result['error']['message'];
@@ -71,84 +84,75 @@ class StreamHandler {
         	return strlen($data);
         }
 
-        /*
-            此处步骤仅针对 openai 接口而言
-            每次触发回调函数时，里边会有多条data数据，需要分割
-            如某次收到 $data 如下所示：
-            data: {"id":"chatcmpl-6wimHHBt4hKFHEpFnNT2ryUeuRRJC","object":"chat.completion.chunk","created":1679453169,"model":"gpt-3.5-turbo-0301","choices":[{"delta":{"role":"assistant"},"index":0,"finish_reason":null}]}\n\ndata: {"id":"chatcmpl-6wimHHBt4hKFHEpFnNT2ryUeuRRJC","object":"chat.completion.chunk","created":1679453169,"model":"gpt-3.5-turbo-0301","choices":[{"delta":{"content":"以下"},"index":0,"finish_reason":null}]}\n\ndata: {"id":"chatcmpl-6wimHHBt4hKFHEpFnNT2ryUeuRRJC","object":"chat.completion.chunk","created":1679453169,"model":"gpt-3.5-turbo-0301","choices":[{"delta":{"content":"是"},"index":0,"finish_reason":null}]}\n\ndata: {"id":"chatcmpl-6wimHHBt4hKFHEpFnNT2ryUeuRRJC","object":"chat.completion.chunk","created":1679453169,"model":"gpt-3.5-turbo-0301","choices":[{"delta":{"content":"使用"},"index":0,"finish_reason":null}]}
-
-            最后两条一般是这样的：
-            data: {"id":"chatcmpl-6wimHHBt4hKFHEpFnNT2ryUeuRRJC","object":"chat.completion.chunk","created":1679453169,"model":"gpt-3.5-turbo-0301","choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\ndata: [DONE]
-
-            根据以上 openai 的数据格式，分割步骤如下：
-        */
-
-        // 0、把上次缓冲区内数据拼接上本次的data
         $buffer = $this->data_buffer.$data;
         
-        //拼接完之后，要把缓冲字符串清空
         $this->data_buffer = '';
 
-        // 1、把所有的 'data: {' 替换为 '{' ，'data: [' 换成 '['
         $buffer = str_replace('data: {', '{', $buffer);
         $buffer = str_replace('data: [', '[', $buffer);
 
-        // 2、把所有的 '}\n\n{' 替换维 '}[br]{' ， '}\n\n[' 替换为 '}[br]['
         $buffer = str_replace("}\n\n{", '}[br]{', $buffer);
         $buffer = str_replace("}\n\n[", '}[br][', $buffer);
 
-        // 3、用 '[br]' 分割成多行数组
         $lines = explode('[br]', $buffer);
 
-        // 记录处理后的数据
-        file_put_contents($debugDir . 'processed_data_' . $this->qmd5 . '_' . $this->counter . '.json', 
-            json_encode([
-                'original_data_length' => strlen($data),
-                'buffer_length' => strlen($buffer),
-                'lines_count' => count($lines),
-                'lines' => $lines
-            ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+        if ($this->enable_debug_logging) {
+            if (!file_exists($this->debug_log_dir_stream)) mkdir($this->debug_log_dir_stream, 0755, true);
+            file_put_contents($this->debug_log_dir_stream . 'processed_data_' . $this->qmd5 . '_' . $this->counter . '_' . uniqid() . '.json', 
+                json_encode([
+                    'original_data_length' => strlen($data),
+                    'buffer_length' => strlen($buffer),
+                    'lines_count' => count($lines),
+                    'lines' => $lines
+                ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+        }
 
-        // 4、循环处理每一行，对于最后一行需要判断是否是完整的json
         $line_c = count($lines);
         
         foreach($lines as $li=>$line){
             if(trim($line) == '[DONE]'){
-                //数据传输结束
                 $this->data_buffer = '';
                 $this->counter = 0;
                 $this->sensitive_check();
                 if (!$this->streamHasContent) {
-                    // 如果没有收到任何内容就结束了，可能是某种错误
-                    file_put_contents($debugDir . 'no_content_' . $this->qmd5 . '.log', 
-                        '警告: 接收到[DONE]但未收到任何有效内容' . PHP_EOL);
+                    if ($this->enable_debug_logging) {
+                        if (!file_exists($this->debug_log_dir_stream)) mkdir($this->debug_log_dir_stream, 0755, true);
+                        file_put_contents($this->debug_log_dir_stream . 'no_content_' . $this->qmd5 . '_' . uniqid() . '.log', 
+                            '警告: 接收到[DONE]但未收到任何有效内容' . PHP_EOL);
+                    }
                     $this->end('警告: 未收到API返回的有效内容，请检查API配置和日志');
                 } else {
                     $this->end();
                 }
-                $this->streamHasContent = false; // 重置状态，为下一次流（如果适用）做准备
+                $this->streamHasContent = false;
                 break;
             }
             $line_data = json_decode(trim($line), TRUE);
             if( !is_array($line_data) || !isset($line_data['choices']) || !isset($line_data['choices'][0]) ){
                 if($li == ($line_c - 1)){
-                    //如果是最后一行
                     $this->data_buffer = $line;
                     break;
                 }
-                //如果是中间行无法json解析，则写入错误日志中
-                file_put_contents($debugDir . 'parse_error_' . $this->qmd5 . '_' . $this->counter . '_' . $li . '.log',
-                    json_encode([
-                        'line' => $line,
-                        'error' => json_last_error_msg()
-                    ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
-                file_put_contents('./log/error.'.$this->qmd5.'.log', json_encode(['i'=>$this->counter, 'line'=>$line, 'li'=>$li], JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT).PHP_EOL.PHP_EOL, FILE_APPEND);
+                if ($this->enable_debug_logging) {
+                     if (!file_exists($this->debug_log_dir_stream)) mkdir($this->debug_log_dir_stream, 0755, true);
+                    file_put_contents($this->debug_log_dir_stream . 'parse_error_' . $this->qmd5 . '_' . $this->counter . '_' . $li . '_' . uniqid() . '.log',
+                        json_encode([
+                            'line' => $line,
+                            'error' => json_last_error_msg()
+                        ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+                }
+                if ($this->enable_stream_data_logging) {
+                    if (!file_exists('./log/')) {
+                        mkdir('./log/', 0755, true);
+                    }
+                    file_put_contents('./log/error.'.$this->qmd5.'.log', json_encode(['i'=>$this->counter, 'line'=>$line, 'li'=>$li], JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT).PHP_EOL.PHP_EOL, FILE_APPEND);
+                }
                 continue;
             }
 
             if( isset($line_data['choices'][0]['delta']) && isset($line_data['choices'][0]['delta']['content']) ){
             	$this->sensitive_check($line_data['choices'][0]['delta']['content']);
-                $this->streamHasContent = true; // 使用成员变量
+                $this->streamHasContent = true;
             }
         }
 
@@ -156,13 +160,11 @@ class StreamHandler {
     }
 
     private function sensitive_check($content = NULL){
-        // 如果不检测敏感词，则直接返回给前端
         if(!$this->check_sensitive){
             $this->write($content);
             return;
         }
-    	//每个 content 都检测是否包含换行或者停顿符号，如有，则成为一个新行
-        if(!$this->has_pause($content)){
+    	if(!$this->has_pause($content)){
             $this->chars[] = $content;
             return;
         }

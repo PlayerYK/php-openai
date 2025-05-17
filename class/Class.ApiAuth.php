@@ -10,6 +10,8 @@ class ApiAuth {
     private $enableOriginAuth;
     private $enableStrictMode;
     private $enableLogging;
+    private $enable_debug_logging;
+    private $debug_log_dir_base = './log/debug/';
     
     /**
      * 构造函数
@@ -24,6 +26,7 @@ class ApiAuth {
      *                      - enable_origin_auth: 是否启用Origin验证
      *                      - enable_strict_mode: 是否启用严格模式（验证失败时拒绝请求）
      *                      - enable_logging: 是否启用请求日志记录
+     *                      - enable_debug_logging: 是否启用详细调试日志
      */
     public function __construct($params = []) {
         $this->validTokens = $params['valid_tokens'] ?? [];
@@ -37,6 +40,7 @@ class ApiAuth {
         $this->enableOriginAuth = $params['enable_origin_auth'] ?? false;
         $this->enableStrictMode = $params['enable_strict_mode'] ?? false;
         $this->enableLogging = $params['enable_logging'] ?? true;
+        $this->enable_debug_logging = $params['enable_debug_logging'] ?? false;
         
         // 确保日志目录存在
         if ($this->enableLogging && !file_exists($this->logDir)) {
@@ -58,30 +62,32 @@ class ApiAuth {
         $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
         $ipAddress = $this->getClientIp();
         
-        // 增强调试日志
-        $debugInfo = [
-            'time' => date('Y-m-d H:i:s'),
-            'headers' => $headers,
-            'token' => $token,
-            'referer' => $referer,
-            'origin' => $origin,
-            'user_agent' => $userAgent,
-            'ip' => $ipAddress,
-            'valid_referers' => $this->validReferers,
-            'valid_origins' => $this->validOrigins,
-            'enable_referer_auth' => $this->enableRefererAuth,
-            'enable_origin_auth' => $this->enableOriginAuth,
-            'enable_strict_mode' => $this->enableStrictMode
-        ];
-        
-        // 调试日志目录
-        $debugDir = './log/debug/auth/';
-        if (!file_exists($debugDir)) {
-            mkdir($debugDir, 0755, true);
+        if ($this->enable_debug_logging) {
+            // 增强调试日志
+            $debugInfo = [
+                'time' => date('Y-m-d H:i:s'),
+                'headers' => $headers,
+                'token' => $token,
+                'referer' => $referer,
+                'origin' => $origin,
+                'user_agent' => $userAgent,
+                'ip' => $ipAddress,
+                'valid_referers' => $this->validReferers,
+                'valid_origins' => $this->validOrigins,
+                'enable_referer_auth' => $this->enableRefererAuth,
+                'enable_origin_auth' => $this->enableOriginAuth,
+                'enable_strict_mode' => $this->enableStrictMode
+            ];
+            
+            // 调试日志目录
+            $debugDirAuth = $this->debug_log_dir_base . 'auth/';
+            if (!file_exists($debugDirAuth)) {
+                mkdir($debugDirAuth, 0755, true);
+            }
+            
+            file_put_contents($debugDirAuth . 'auth_' . date('Y-m-d_H-i-s') . '_' . uniqid() . '.json', 
+                json_encode($debugInfo, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
         }
-        
-        file_put_contents($debugDir . 'auth_' . date('Y-m-d_H-i-s') . '.json', 
-            json_encode($debugInfo, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
         
         // 记录请求信息
         if ($this->enableLogging) {
