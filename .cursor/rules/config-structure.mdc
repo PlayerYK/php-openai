@@ -1,0 +1,67 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# 配置文件结构说明
+
+[config.ini](mdc:config.ini) 和 [config.sample.ini](mdc:config.sample.ini) 包含了系统运行所需的所有配置项，结构如下：
+
+## OpenAI API设置
+OpenAI API相关配置位于 `[openai]` 部分：
+```ini
+[openai]
+api_url=https://api.openai.com/v1/chat/completions
+api_key=sk-xxxxx
+api_model=gpt-3.5-turbo-1106
+```
+
+## 安全设置
+安全相关配置位于 `[security]` 部分，按功能分组：
+
+### 全局日志设置
+```ini
+enable_logging=true        # 是否启用请求日志记录
+api_log_dir=./log/api/     # API调用日志目录
+```
+
+### 敏感词过滤设置
+```ini
+enable_sensitive_words_filter=true  # 是否启用敏感词过滤
+sensitive_words_file=./sensitive_words_sdfdsfvdfs5v56v5dfvdf.txt  # 敏感词文件路径
+```
+
+### Token验证设置
+```ini
+enable_token_auth=false          # 是否启用Token验证
+valid_tokens=token1,token2,token3  # 有效的API令牌列表
+```
+
+### Referer验证设置
+```ini
+enable_referer_auth=false  # 是否启用Referer验证
+valid_referers=chrome-extension://youextensionid,http://localhost  # 有效的HTTP引用来源
+```
+
+### Origin验证设置
+```ini
+enable_origin_auth=false  # 是否启用Origin验证
+valid_origins=chrome-extension://youextensionid,http://localhost  # 有效的来源域名
+auth_log_dir=./log/auth/  # 身份验证日志目录
+```
+
+### 频率限制设置
+```ini
+enable_rate_limit=false  # 是否启用频率限制
+max_requests=30          # 时间窗口内最大请求数量
+time_window=60           # 时间窗口秒数
+rate_limit_log_dir=./log/rate_limit/  # 频率限制日志目录
+```
+
+### 验证模式设置
+```ini
+enable_strict_mode=false  # 是否启用严格模式，验证失败时拒绝请求
+```
+
+## 部署建议
+详细的分阶段部署策略和最佳实践请参考 [deployment-guide.md](mdc:deployment-guide.md) 文件。

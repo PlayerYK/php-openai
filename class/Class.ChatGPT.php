@@ -9,11 +9,19 @@ class ChatGPT {
 	private $question;
     private $dfa = NULL;
     private $check_sensitive = FALSE;
+    private $log_dir = './log/api/';
+    private $client_ip = '';
 
 	public function __construct($params) {
         $this->api_key = $params['api_key'] ?? '';
         $this->api_url = $params['api_url'] ?? 'https://api.openai.com/v1/chat/completions';
         $this->api_model = $params['api_model'] ?? 'gpt-3.5-turbo-0613';
+        $this->log_dir = $params['log_dir'] ?? './log/api/';
+        
+        // 确保日志目录存在
+        if (!file_exists($this->log_dir)) {
+            mkdir($this->log_dir, 0755, true);
+        }
     }
 
     public function set_dfa(&$dfa){
@@ -25,6 +33,17 @@ class ChatGPT {
 
     public function qa($params){
         $this->question = $params['question'];
+        $this->client_ip = $params['client_ip'] ?? '';
+        
+        // 记录API请求
+        $this->logRequest([
+            'question' => $this->question,
+            'client_ip' => $this->client_ip,
+            'model' => $this->api_model,
+            'temperature' => $params['temperature'] ?? 0.8,
+            'time' => date('Y-m-d H:i:s')
+        ]);
+        
         $this->streamHandler = new StreamHandler([
             'qmd5' => md5($this->question.''.time())
         ]);
@@ -34,6 +53,7 @@ class ChatGPT {
 
 
         if(empty($this->api_key)){
+            $this->logError('API key is empty');
             $this->streamHandler->end('OpenAI 的 api key 还没填');
             return;
         }
@@ -41,6 +61,7 @@ class ChatGPT {
 
         // 开启检测且提问包含敏感词
         if($this->check_sensitive && $this->dfa->containsSensitiveWords($this->question)){
+            $this->logError('Question contains sensitive words');
             $this->streamHandler->end('您的问题不合适，AI暂时无法回答');
             return;
         }
@@ -90,11 +111,74 @@ class ChatGPT {
     	$response = curl_exec($ch);
 
     	if (curl_errno($ch)) {
+    	    $this->logError('CURL error: ' . curl_error($ch));
     	    file_put_contents('./log/curl.error.log', curl_error($ch).PHP_EOL.PHP_EOL, FILE_APPEND);
     	}
 
     	curl_close($ch);
     }
-
+    
+    /**
+     * 记录API请求
+     * 
+     * @param array $requestData 请求数据
+     */
+    private function logRequest($requestData) {
+        $logFile = $this->log_dir . 'requests_' . date('Y-m-d') . '.log';
+        $logEntry = json_encode($requestData, JSON_UNESCAPED_UNICODE) . PHP_EOL;
+        file_put_contents($logFile, $logEntry, FILE_APPEND);
+        
+        // 记录请求统计
+        $this->updateRequestStats();
+    }
+    
+    /**
+     * 记录错误信息
+     * 
+     * @param string $error 错误信息
+     */
+    private function logError($error) {
+        $logFile = $this->log_dir . 'errors.log';
+        $logEntry = date('Y-m-d H:i:s') . ' - IP: ' . $this->client_ip . ' - Error: ' . $error . PHP_EOL;
+        file_put_contents($logFile, $logEntry, FILE_APPEND);
+    }
+    
+    /**
+     * 更新请求统计
+     */
+    private function updateRequestStats() {
+        $statsFile = $this->log_dir . 'stats.json';
+        $today = date('Y-m-d');
+        
+        // 读取现有统计数据
+        $stats = [];
+        if (file_exists($statsFile)) {
+            $statsContent = file_get_contents($statsFile);
+            if (!empty($statsContent)) {
+                $stats = json_decode($statsContent, true) ?? [];
+            }
+        }
+        
+        // 更新今日统计
+        if (!isset($stats[$today])) {
+            $stats[$today] = [
+                'total' => 0,
+                'ip_count' => []
+            ];
+        }
+        
+        $stats[$today]['total']++;
+        
+        // 更新IP统计
+        if (!empty($this->client_ip)) {
+            if (!isset($stats[$today]['ip_count'][$this->client_ip])) {
+                $stats[$today]['ip_count'][$this->client_ip] = 0;
+            }
+            $stats[$today]['ip_count'][$this->client_ip]++;
+        }
+        
+        // 保存统计数据
+        file_put_contents($statsFile, json_encode($stats, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+    }
 }
 

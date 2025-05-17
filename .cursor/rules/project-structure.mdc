@@ -1,0 +1,17 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# 项目结构说明
+
+本项目的主要入口为 [index.html](mdc:index.html) 和 [chat.php](mdc:chat.php)。
+
+- 配置文件存放于 [config.ini](mdc:config.ini) 和 [config.sample.ini](mdc:config.sample.ini)。
+- 静态资源（CSS、JS、图片）位于 [static/](mdc:static) 目录下。
+- 主要的 PHP 类文件位于 [class/](mdc:class) 目录。
+- 日志文件存放在 [log/](mdc:log) 目录。
+- [cloudflare.worker.js](mdc:cloudflare.worker.js) 为 Cloudflare Worker 脚本。
+- [sensitive_words_sdfdsfvdfs5v56v5dfvdf.txt](mdc:sensitive_words_sdfdsfvdfs5v56v5dfvdf.txt) 为敏感词文本文件。
+
+请参考上述文件和目录进行项目开发和维护。

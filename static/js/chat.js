@@ -4,6 +4,20 @@ const sendButton = document.getElementById('send');
 var qaIdx = 0,answers={},answerContent='',answerWords=[];
 var codeStart=false,lastWord='',lastLastWord='';
 var typingTimer=null,typing=false,typingIdx=0,contentIdx=0,contentEnd=false;
+// API Token - 从Chrome扩展存储中读取
+var apiToken = '';
+
+// 初始化时获取API Token
+document.addEventListener('DOMContentLoaded', function() {
+    // 如果是Chrome扩展环境，从Storage获取Token
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+        chrome.storage.sync.get(['apiToken'], function(result) {
+            if (result.apiToken) {
+                apiToken = result.apiToken;
+            }
+        });
+    }
+});
 
 //markdown解析，代码高亮设置
 marked.setOptions({
@@ -55,39 +69,79 @@ function sendMessage() {
 }
 
 function getAnswer(inputValue){
-    inputValue = encodeURIComponent(inputValue.replace(/\+/g, '{[$add$]}'));
-    const url = "./chat.php?q="+inputValue;
-    const eventSource = new EventSource(url);
+  inputValue = encodeURIComponent(inputValue.replace(/\+/g, "{[$add$]}"));
+  const url = "./chat.php?q=" + inputValue;
+  const eventSource = new EventSource(url);
 
-    eventSource.addEventListener("open", (event) => {
-        console.log("连接已建立", JSON.stringify(event));
-    });
+  // 如果有API Token，添加到请求头
+  if (apiToken) {
+    const originalOpen = EventSource.prototype.open;
+    EventSource.prototype.open = function () {
+      this.setRequestHeader("X-Api-Token", apiToken);
+      originalOpen.apply(this, arguments);
+    };
+  }
 
-    eventSource.addEventListener("message", (event) => {
-        //console.log("接收数据：", event);
-        try {
-            var result = JSON.parse(event.data);
-            if(result.time && result.content ){
-                answerWords.push(result.content);
-                contentIdx += 1;
-            }
-        } catch (error) {
-            console.log(error);
-        }
-    });
+  eventSource.addEventListener("open", (event) => {
+    console.log("连接已建立", JSON.stringify(event));
+  });
 
-    eventSource.addEventListener("error", (event) => {
-        console.error("发生错误：", JSON.stringify(event));
-    });
+  eventSource.addEventListener("message", (event) => {
+    //console.log("接收数据：", event);
+    try {
+      var result = JSON.parse(event.data);
+      if (result.time && result.content) {
+        answerWords.push(result.content);
+        contentIdx += 1;
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  });
 
-    eventSource.addEventListener("close", (event) => {
-        console.log("连接已关闭", JSON.stringify(event.data));
-        eventSource.close();
-        contentEnd = true;
-        console.log((new Date().getTime()), 'answer end');
-    });
+  eventSource.addEventListener("error", (event) => {
+    console.error("发生错误：", JSON.stringify(event));
+    handleApiError(event);
+  });
+
+  eventSource.addEventListener("close", (event) => {
+    console.log("连接已关闭", JSON.stringify(event.data));
+    eventSource.close();
+    contentEnd = true;
+    console.log(new Date().getTime(), "answer end");
+  });
 }
 
+// 处理API错误
+function handleApiError(event) {
+    try {
+        if (event.data) {
+            const errorData = JSON.parse(event.data);
+            if (errorData.error) {
+                // 显示错误信息
+                if (answers[qaIdx]) {
+                    answers[qaIdx].innerHTML = marked.parse('错误: ' + errorData.error);
+                }
+                
+                // 如果是频率限制错误，显示等待时间
+                if (errorData.retry_after) {
+                    const retrySeconds = parseInt(errorData.retry_after);
+                    const retryMinutes = Math.ceil(retrySeconds / 60);
+                    if (answers[qaIdx]) {
+                        answers[qaIdx].innerHTML += marked.parse(`\n\n请等待 ${retryMinutes} 分钟后再试。`);
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        console.error("处理API错误失败:", e);
+    }
+    
+    // 重置输入状态
+    clearInterval(typingTimer);
+    input.disabled = false;
+    sendButton.disabled = false;
+}
 
 function typingWords(){
     if(contentEnd && contentIdx==typingIdx){

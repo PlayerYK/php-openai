@@ -140,7 +140,7 @@ class StreamHandler {
 
     private function write($content = NULL, $flush=TRUE){
         if($content != NULL){
-            echo 'data: '.json_encode(['time'=>date('Y-m-d H:i:s'), 'content'=>$content], JSON_UNESCAPED_UNICODE).PHP_EOL.PHP_EOL;
+            echo 'data: '.json_encode(['time'=>date('Y-m-d H:i:s'), 'content'=>$content], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES).PHP_EOL.PHP_EOL;
         }        
 
         if($flush){
@@ -160,5 +160,3 @@ class StreamHandler {
 
     }
 }
-
-

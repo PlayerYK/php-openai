@@ -1,0 +1,29 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# 安全实施详情
+
+为防止API被恶意刷取，我们已在代码中实现了以下安全措施：
+
+## 频率限制
+使用 [Class.RateLimiter.php](mdc:class/Class.RateLimiter.php) 实现基于IP的请求频率限制，默认设置为每IP每分钟最多30次请求。
+
+## 身份验证
+通过 [Class.ApiAuth.php](mdc:class/Class.ApiAuth.php) 实现API身份验证，支持以下验证方式：
+- API Token验证
+- HTTP Referer验证
+- Origin验证
+
+## 请求日志
+在 [Class.ChatGPT.php](mdc:class/Class.ChatGPT.php) 中添加了详细的请求日志记录功能，包括：
+- 每日请求统计
+- IP访问统计
+- 错误日志
+
+## 配置说明
+所有安全相关配置项均在 [config.ini](mdc:config.ini) 中的 `[security]` 部分，可参考 [config.sample.ini](mdc:config.sample.ini) 进行配置。
+
+## 前端集成
+在 [chat.js](mdc:static/js/chat.js) 中添加了API Token支持，以便从Chrome扩展中获取并使用认证Token。
