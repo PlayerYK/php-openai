@@ -9,8 +9,11 @@ class ApiAuth {
     private $enableRefererAuth;
     private $enableOriginAuth;
     private $enableStrictMode;
-    private $enableLogging;
-    private $enable_debug_logging;
+
+    private $masterLoggingEnabled; // 新增: 全局日志总开关
+    private $authLoggingEnabled;   // 新增: 身份验证模块日志开关
+    private $authDebugLoggingEnabled; // 修改: 身份验证调试日志开关
+
     private $debug_log_dir_base = './log/debug/';
     
     /**
@@ -20,31 +23,44 @@ class ApiAuth {
      *                      - valid_tokens: 有效的令牌数组
      *                      - valid_referers: 有效的HTTP引用来源数组
      *                      - valid_origins: 有效的来源域名数组
-     *                      - log_dir: 日志目录
+     *                      - log_dir: 身份验证日志目录 (来自 config.ini -> auth_log_dir)
+     *                      - master_logging_enabled: 全局日志总开关 (来自 config.ini -> master_logging_enabled)
+     *                      - enable_auth_logging: 身份验证模块日志开关 (来自 config.ini -> enable_auth_logging)
      *                      - enable_token_auth: 是否启用Token验证
      *                      - enable_referer_auth: 是否启用Referer验证
      *                      - enable_origin_auth: 是否启用Origin验证
      *                      - enable_strict_mode: 是否启用严格模式（验证失败时拒绝请求）
-     *                      - enable_logging: 是否启用请求日志记录
-     *                      - enable_debug_logging: 是否启用详细调试日志
+     *                      - enable_auth_debug_logging: 是否启用详细身份验证调试日志 (来自 config.ini -> enable_auth_debug_logging)
      */
     public function __construct($params = []) {
         $this->validTokens = $params['valid_tokens'] ?? [];
         $this->validReferers = $params['valid_referers'] ?? [];
         $this->validOrigins = $params['valid_origins'] ?? [];
-        $this->logDir = $params['log_dir'] ?? './log/auth/';
+        $this->logDir = $params['log_dir'] ?? './log/auth/'; // 对应 config.ini 的 auth_log_dir
         
+        // 新的日志控制开关
+        $this->masterLoggingEnabled = $params['master_logging_enabled'] ?? false;
+        $this->authLoggingEnabled = $params['enable_auth_logging'] ?? false;
+        $this->authDebugLoggingEnabled = $params['enable_auth_debug_logging'] ?? false;
+
         // 安全功能开关
         $this->enableTokenAuth = $params['enable_token_auth'] ?? false; 
         $this->enableRefererAuth = $params['enable_referer_auth'] ?? false;
         $this->enableOriginAuth = $params['enable_origin_auth'] ?? false;
         $this->enableStrictMode = $params['enable_strict_mode'] ?? false;
-        $this->enableLogging = $params['enable_logging'] ?? true;
-        $this->enable_debug_logging = $params['enable_debug_logging'] ?? false;
         
-        // 确保日志目录存在
-        if ($this->enableLogging && !file_exists($this->logDir)) {
+        // 确保日志目录存在 (常规身份验证日志)
+        if ($this->masterLoggingEnabled && $this->authLoggingEnabled && !empty($this->logDir) && !file_exists($this->logDir)) {
             mkdir($this->logDir, 0755, true);
+        }
+
+        // 确保调试日志目录存在 (身份验证调试日志)
+        // 注意: 调试日志的开启独立于 masterLoggingEnabled 和 authLoggingEnabled
+        if ($this->authDebugLoggingEnabled && !empty($this->debug_log_dir_base)) {
+            $debugDirAuth = $this->debug_log_dir_base . 'auth/';
+            if (!file_exists($debugDirAuth)) {
+                mkdir($debugDirAuth, 0755, true);
+            }
         }
     }
     
@@ -62,7 +78,7 @@ class ApiAuth {
         $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
         $ipAddress = $this->getClientIp();
         
-        if ($this->enable_debug_logging) {
+        if ($this->authDebugLoggingEnabled) { // 使用新的调试日志开关
             // 增强调试日志
             $debugInfo = [
                 'time' => date('Y-m-d H:i:s'),
@@ -89,8 +105,8 @@ class ApiAuth {
                 json_encode($debugInfo, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
         }
         
-        // 记录请求信息
-        if ($this->enableLogging) {
+        // 记录请求信息 (常规身份验证日志)
+        if ($this->masterLoggingEnabled && $this->authLoggingEnabled) {
             $this->logRequest([
                 'token' => $token,
                 'referer' => $referer,
@@ -106,7 +122,7 @@ class ApiAuth {
         
         // 如果启用了Token验证，则进行验证
         if ($this->enableTokenAuth && !empty($this->validTokens) && !in_array($token, $this->validTokens)) {
-            if ($this->enableLogging) {
+            if ($this->masterLoggingEnabled && $this->authLoggingEnabled) { // 使用新的日志判断条件
                 $this->logFailure('Invalid token', $ipAddress);
             }
             $isValid = false;
@@ -123,7 +139,7 @@ class ApiAuth {
             }
             
             if (!$isValidReferer) {
-                if ($this->enableLogging) {
+                if ($this->masterLoggingEnabled && $this->authLoggingEnabled) { // 使用新的日志判断条件
                     $this->logFailure('Invalid referer: ' . $referer, $ipAddress);
                 }
                 $isValid = false;
@@ -132,7 +148,7 @@ class ApiAuth {
         
         // 如果启用了Origin验证，则进行验证
         if ($isValid && $this->enableOriginAuth && !empty($this->validOrigins) && !in_array($origin, $this->validOrigins)) {
-            if ($this->enableLogging) {
+            if ($this->masterLoggingEnabled && $this->authLoggingEnabled) { // 使用新的日志判断条件
                 $this->logFailure('Invalid origin: ' . $origin, $ipAddress);
             }
             $isValid = false;
@@ -140,7 +156,7 @@ class ApiAuth {
         
         // 如果验证失败但不是严格模式，记录日志但仍然返回true
         if (!$isValid && !$this->enableStrictMode) {
-            if ($this->enableLogging) {
+            if ($this->masterLoggingEnabled && $this->authLoggingEnabled) { // 使用新的日志判断条件
                 $this->logWarning('Authentication failed but allowed in non-strict mode', $ipAddress);
             }
             return true;
@@ -199,7 +215,7 @@ class ApiAuth {
      * @param array $requestData 请求数据
      */
     private function logRequest($requestData) {
-        if (!$this->enableLogging) return;
+        if (!($this->masterLoggingEnabled && $this->authLoggingEnabled)) return; // 使用新的日志判断条件
         
         $logFile = $this->logDir . 'requests.log';
         $logEntry = json_encode($requestData) . PHP_EOL;
@@ -213,7 +229,7 @@ class ApiAuth {
      * @param string $ipAddress 客户端IP地址
      */
     private function logFailure($reason, $ipAddress) {
-        if (!$this->enableLogging) return;
+        if (!($this->masterLoggingEnabled && $this->authLoggingEnabled)) return; // 使用新的日志判断条件
         
         $logFile = $this->logDir . 'failures.log';
         $logEntry = date('Y-m-d H:i:s') . ' - IP: ' . $ipAddress . ' - Reason: ' . $reason . PHP_EOL;
@@ -227,7 +243,7 @@ class ApiAuth {
      * @param string $ipAddress 客户端IP地址
      */
     private function logWarning($message, $ipAddress) {
-        if (!$this->enableLogging) return;
+        if (!($this->masterLoggingEnabled && $this->authLoggingEnabled)) return; // 使用新的日志判断条件
         
         $logFile = $this->logDir . 'warnings.log';
         $logEntry = date('Y-m-d H:i:s') . ' - IP: ' . $ipAddress . ' - Message: ' . $message . PHP_EOL;
@@ -329,11 +345,29 @@ class ApiAuth {
     }
     
     /**
-     * 启用或禁用日志记录
+     * 启用或禁用身份验证模块日志记录 (此方法现在控制本模块的独立开关)
      * 
      * @param bool $enable 是否启用
      */
-    public function enableLogging($enable) {
-        $this->enableLogging = $enable;
+    public function enableAuthLogging($enable) {
+        $this->authLoggingEnabled = $enable;
+    }
+
+    /**
+     * 启用或禁用身份验证模块的详细调试日志
+     * 
+     * @param bool $enable 是否启用
+     */
+    public function enableAuthDebugLogging($enable) {
+        $this->authDebugLoggingEnabled = $enable;
+    }
+
+    /**
+     * 设置全局日志总开关状态 (通常由应用层面统一管理)
+     * 
+     * @param bool $enable 是否启用
+     */
+    public function setMasterLogging($enable) {
+        $this->masterLoggingEnabled = $enable;
     }
 } 

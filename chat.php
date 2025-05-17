@@ -21,14 +21,21 @@ function get_boolean_setting($settings_array, $section, $key, $default = false) 
     return (bool)$value;
 }
 
-// 获取调试和日志开关状态
-$enable_debug_logging = get_boolean_setting($settings, 'debug', 'enable_debug', false);
+// 获取新的日志开关状态
+$masterLoggingEnabled = get_boolean_setting($settings, 'security', 'master_logging_enabled', true);
+$enableApiCallLogging = get_boolean_setting($settings, 'security', 'enable_api_call_logging', true);
+$enableAuthLogging = get_boolean_setting($settings, 'security', 'enable_auth_logging', true);
+$enableRateLimitLogging = get_boolean_setting($settings, 'security', 'enable_rate_limit_logging', true);
+
+// 调试日志开关 (对应 config.ini 中的 [debug] enable_auth_debug_logging)
+// 将 $enable_debug_logging 重命名为 $enableAuthDebugLogging 以提高清晰度
+$enableAuthDebugLogging = get_boolean_setting($settings, 'debug', 'enable_auth_debug_logging', false);
 $enable_stream_data_logging = get_boolean_setting($settings, 'debug', 'enable_stream_data_log', false);
-$enable_security_logging = get_boolean_setting($settings, 'security', 'enable_logging', true);
 
 
 // 添加全局请求信息记录（调试用）
-if ($enable_debug_logging) {
+// 使用新的变量名 $enableAuthDebugLogging
+if ($enableAuthDebugLogging) {
     $debug_dir = $settings['debug']['debug_log_dir'] ?? './log/debug/';
     if (!file_exists($debug_dir)) {
         mkdir($debug_dir, 0755, true);
@@ -115,8 +122,9 @@ $apiAuth = new ApiAuth([
     'enable_referer_auth' => get_boolean_setting($settings, 'security', 'enable_referer_auth', false),
     'enable_origin_auth' => get_boolean_setting($settings, 'security', 'enable_origin_auth', false),
     'enable_strict_mode' => get_boolean_setting($settings, 'security', 'enable_strict_mode', false),
-    'enable_logging' => $enable_security_logging,
-    'enable_debug_logging' => $enable_debug_logging
+    'master_logging_enabled' => $masterLoggingEnabled,
+    'enable_auth_logging' => $enableAuthLogging,
+    'enable_auth_debug_logging' => $enableAuthDebugLogging
 ]);
 
 // 设置CORS头
@@ -164,12 +172,15 @@ if (!$apiAuth->validateRequest()) {
 }
 
 // 初始化请求频率限制
-if (get_boolean_setting($settings, 'security', 'enable_rate_limit', false)) {
+$enableRateLimitFeature = get_boolean_setting($settings, 'security', 'enable_rate_limit', false);
+if ($enableRateLimitFeature) {
     $rateLimiter = new RateLimiter([
         'max_requests' => (int)($settings['security']['max_requests'] ?? 10),
         'time_window' => (int)($settings['security']['time_window'] ?? 60),
         'log_dir' => $settings['security']['rate_limit_log_dir'] ?? './log/rate_limit/',
-        'enable_logging' => $enable_security_logging
+        'master_logging_enabled' => $masterLoggingEnabled,
+        'enable_rate_limit_logging' => $enableRateLimitLogging,
+        'rate_limiting_feature_enabled' => $enableRateLimitFeature
     ]);
 
     // 获取客户端IP
@@ -230,8 +241,8 @@ $chat = new ChatGPT([
     'api_url' => $settings['openai']['api_url'] ?? '',
     'api_model' => $settings['openai']['api_model'] ?? 'gpt-3.5-turbo-1106',
     'log_dir' => $settings['security']['api_log_dir'] ?? './log/api/',
-    'enable_operational_logging' => $enable_security_logging,
-    'enable_debug_logging' => $enable_debug_logging
+    'enable_operational_logging' => ($masterLoggingEnabled && $enableApiCallLogging),
+    'enable_debug_logging' => $enableAuthDebugLogging
 ]);
 
 // 启用敏感词检测
@@ -245,9 +256,9 @@ if (get_boolean_setting($settings, 'security', 'enable_sensitive_words_filter', 
 
 $streamHandlerParams = [
     'qmd5' => md5($textToTranslate . '' . time()),
-    'enable_debug_logging' => $enable_debug_logging,
+    'enable_debug_logging' => $enableAuthDebugLogging,
     'enable_stream_data_logging' => $enable_stream_data_logging,
-    'debug_log_dir' => $settings['debug']['debug_log_dir'] ?? './log/debug/stream/'
+    'debug_log_dir' => $settings['debug']['debug_log_dir'] ?? './log/debug/'
 ];
 
 // 开始提问
