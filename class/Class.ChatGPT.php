@@ -123,6 +123,10 @@ class ChatGPT {
     	curl_setopt($ch, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
     	curl_setopt($ch, CURLOPT_POSTFIELDS, $json);
     	curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        
+        // 设置超时，避免请求挂起
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10); // 连接超时10秒
+        curl_setopt($ch, CURLOPT_TIMEOUT, 60); // 总超时60秒
 
         // 增加更多curl调试选项
         curl_setopt($ch, CURLOPT_VERBOSE, true);
@@ -139,12 +143,37 @@ class ChatGPT {
             
             // 记录更多curl信息
             $curlInfo = curl_getinfo($ch);
+            $errorDetails = [
+                'error' => $error,
+                'curl_info' => $curlInfo,
+                'request_url' => $this->api_url,
+                'request_model' => $this->api_model
+            ];
+            
             file_put_contents($debugDir . 'curl_error_' . date('Y-m-d_H-i-s') . '.json', 
-                json_encode([
-                    'error' => $error,
-                    'curl_info' => $curlInfo
-                ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
-    	}
+                json_encode($errorDetails, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+                
+            // 通知用户连接错误
+            $this->streamHandler->end('连接OpenAI API失败: ' . $error);
+    	} else {
+            // 检查HTTP状态码
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            if ($httpCode != 200) {
+                $statusError = "HTTP错误: 状态码 $httpCode";
+                $this->logError($statusError);
+                
+                // 记录HTTP错误信息
+                $curlInfo = curl_getinfo($ch);
+                file_put_contents($debugDir . 'http_error_' . date('Y-m-d_H-i-s') . '.json', 
+                    json_encode([
+                        'error' => $statusError,
+                        'curl_info' => $curlInfo
+                    ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+                    
+                // 通知用户HTTP错误
+                $this->streamHandler->end('API响应错误: ' . $statusError);
+            }
+        }
 
         fclose($verbose);
     	curl_close($ch);

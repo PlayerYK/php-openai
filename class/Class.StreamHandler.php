@@ -9,6 +9,7 @@ class StreamHandler {
     private $punctuation;//停顿符号
     private $dfa = NULL;
     private $check_sensitive = FALSE;
+    private $streamHasContent = false; // 新增的成员变量
 
     public function __construct($params) {
         $this->buffer = '';
@@ -17,6 +18,7 @@ class StreamHandler {
         $this->chars = [];
         $this->lines = [];
         $this->punctuation = ['，', '。', '；', '？', '！', '……'];
+        $this->streamHasContent = false; // 在构造函数中初始化
     }
 
     public function set_dfa(&$dfa){
@@ -43,12 +45,29 @@ class StreamHandler {
             
         file_put_contents('./log/data.'.$this->qmd5.'.log', $this->counter.'=='.$data.PHP_EOL.'--------------------'.PHP_EOL, FILE_APPEND);
 
+        // 检查流数据是否为空或无效
+        if (empty(trim($data))) {
+            file_put_contents($debugDir . 'empty_data_' . $this->qmd5 . '_' . $this->counter . '.log', 
+                '警告: 接收到空数据' . PHP_EOL);
+            return strlen($data);
+        }
+
+        // 尝试解析整个数据为JSON（可能是错误消息）
         $result = json_decode($data, TRUE);
         if(is_array($result)){
             // 记录错误响应
             file_put_contents($debugDir . 'error_response_' . $this->qmd5 . '.json', 
                 json_encode($result, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
-        	$this->end('openai 请求错误：'.json_encode($result));
+                
+            // 提取错误信息，如果存在
+            $errorMsg = 'OpenAI 请求错误';
+            if (isset($result['error']['message'])) {
+                $errorMsg .= ': ' . $result['error']['message'];
+            } else {
+                $errorMsg .= ': ' . json_encode($result, JSON_UNESCAPED_UNICODE);
+            }
+            
+        	$this->end($errorMsg);
         	return strlen($data);
         }
 
@@ -92,13 +111,22 @@ class StreamHandler {
 
         // 4、循环处理每一行，对于最后一行需要判断是否是完整的json
         $line_c = count($lines);
+        
         foreach($lines as $li=>$line){
             if(trim($line) == '[DONE]'){
                 //数据传输结束
                 $this->data_buffer = '';
                 $this->counter = 0;
                 $this->sensitive_check();
-                $this->end();
+                if (!$this->streamHasContent) {
+                    // 如果没有收到任何内容就结束了，可能是某种错误
+                    file_put_contents($debugDir . 'no_content_' . $this->qmd5 . '.log', 
+                        '警告: 接收到[DONE]但未收到任何有效内容' . PHP_EOL);
+                    $this->end('警告: 未收到API返回的有效内容，请检查API配置和日志');
+                } else {
+                    $this->end();
+                }
+                $this->streamHasContent = false; // 重置状态，为下一次流（如果适用）做准备
                 break;
             }
             $line_data = json_decode(trim($line), TRUE);
@@ -120,6 +148,7 @@ class StreamHandler {
 
             if( isset($line_data['choices'][0]['delta']) && isset($line_data['choices'][0]['delta']['content']) ){
             	$this->sensitive_check($line_data['choices'][0]['delta']['content']);
+                $this->streamHasContent = true; // 使用成员变量
             }
         }
 

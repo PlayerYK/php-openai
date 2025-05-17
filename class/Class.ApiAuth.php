@@ -243,9 +243,14 @@ class ApiAuth {
                 $headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS';
                 $headers['Access-Control-Allow-Headers'] = 'Content-Type, X-Api-Token';
                 $headers['Access-Control-Allow-Credentials'] = 'true';
+            } elseif (!$this->enableStrictMode) {
+                // 非严格模式下，即使Origin验证失败也设置CORS头
+                $headers['Access-Control-Allow-Origin'] = '*';
+                $headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS';
+                $headers['Access-Control-Allow-Headers'] = 'Content-Type, X-Api-Token';
             }
         } else {
-            // 非严格模式下，允许所有来源
+            // 未启用Origin验证，允许所有来源
             $headers['Access-Control-Allow-Origin'] = '*';
             $headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS';
             $headers['Access-Control-Allow-Headers'] = 'Content-Type, X-Api-Token';

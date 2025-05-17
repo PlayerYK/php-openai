@@ -75,11 +75,22 @@ if (!$settings = parse_ini_file('./config.ini', TRUE)){
     exit();
 }
 
+// Helper function to safely convert comma-separated string to array
+// Handles empty strings and trims whitespace
+if (!function_exists('parse_comma_separated_string')) {
+    function parse_comma_separated_string($string) {
+        if (empty($string) || !is_string($string)) {
+            return [];
+        }
+        return array_map('trim', explode(',', $string));
+    }
+}
+
 // 初始化API身份验证
 $apiAuth = new ApiAuth([
-    'valid_tokens' => $settings['security']['valid_tokens'] ?? [],
-    'valid_referers' => $settings['security']['valid_referers'] ?? [],
-    'valid_origins' => $settings['security']['valid_origins'] ?? [],
+    'valid_tokens' => parse_comma_separated_string($settings['security']['valid_tokens'] ?? ''),
+    'valid_referers' => parse_comma_separated_string($settings['security']['valid_referers'] ?? ''),
+    'valid_origins' => parse_comma_separated_string($settings['security']['valid_origins'] ?? ''),
     'log_dir' => $settings['security']['auth_log_dir'] ?? './log/auth/',
     'enable_token_auth' => $settings['security']['enable_token_auth'] ?? false,
     'enable_referer_auth' => $settings['security']['enable_referer_auth'] ?? false,
@@ -96,8 +107,38 @@ foreach ($corsHeaders as $header => $value) {
 
 // 验证请求
 if (!$apiAuth->validateRequest()) {
+    // 获取验证失败原因
+    $debugDir = './log/debug/auth/';
+    $failReason = '未知原因';
+    
+    // 尝试获取最新的auth日志
+    $authFiles = glob($debugDir . 'auth_*.json');
+    if (!empty($authFiles)) {
+        // 按照文件修改时间排序，获取最新的
+        usort($authFiles, function($a, $b) {
+            return filemtime($b) - filemtime($a);
+        });
+        
+        $latestAuthLog = file_get_contents($authFiles[0]);
+        if ($latestAuthLog) {
+            $authData = json_decode($latestAuthLog, true);
+            if ($authData) {
+                $reasons = [];
+                if ($authData['enable_referer_auth'] && empty($authData['referer'])) {
+                    $reasons[] = 'Referer验证失败(空Referer)';
+                }
+                if ($authData['enable_origin_auth'] && empty($authData['origin'])) {
+                    $reasons[] = 'Origin验证失败(空Origin)';
+                }
+                if (!empty($reasons)) {
+                    $failReason = implode(', ', $reasons);
+                }
+            }
+        }
+    }
+    
     echo "event: error".PHP_EOL;
-    echo "data: ".json_encode(['error' => 'Unauthorized request']).PHP_EOL.PHP_EOL;
+    echo "data: ".json_encode(['error' => 'Unauthorized request', 'reason' => $failReason]).PHP_EOL.PHP_EOL;
     flush();
     exit();
 }
