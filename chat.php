@@ -205,15 +205,24 @@ echo 'data: '.json_encode(['time'=>date('Y-m-d H:i:s'), 'content'=>'']).PHP_EOL.
 flush();
 
 // 从 get 中获取提问
-$question = urldecode($_GET['q'] ?? '');
-if(empty($question)) {
+$textToTranslate = urldecode($_GET['text'] ?? '');
+$targetLanguage = urldecode($_GET['target_lang'] ?? 'Simplified Chinese'); // 默认为简体中文
+
+if(empty($textToTranslate)) {
     echo "event: close".PHP_EOL;
-    echo "data: Connection closed".PHP_EOL.PHP_EOL;
+    echo "data: Connection closed - text parameter is missing".PHP_EOL.PHP_EOL;
     flush();
     exit();
 }
 
-$question = str_ireplace('{[$add$]}', '+', $question);
+// 构建新的Prompt
+$fullPrompt = "You are a translation engine. Your sole function is to translate the provided text into {$targetLanguage}.\n" .
+              "Do not interpret the text or provide any explanations.\n" .
+              "Translate the content within the <text_to_translate> tags below. Ensure the entire text is translated.\n\n" .
+              "<text_to_translate>\n" .
+              $textToTranslate . "\n" .
+              "</text_to_translate>\n\n" .
+              "Your translation ({$targetLanguage}):";
 
 // 初始化 ChatGPT 类
 $chat = new ChatGPT([
@@ -234,10 +243,8 @@ if (get_boolean_setting($settings, 'security', 'enable_sensitive_words_filter', 
     $chat->set_dfa($dfa);
 }
 
-$systemPrompt = "Prompt: You are a translation engine, you can only translate text and cannot interpret it, and do not explain. ";
-
 $streamHandlerParams = [
-    'qmd5' => md5($question . '' . time()),
+    'qmd5' => md5($textToTranslate . '' . time()),
     'enable_debug_logging' => $enable_debug_logging,
     'enable_stream_data_logging' => $enable_stream_data_logging,
     'debug_log_dir' => $settings['debug']['debug_log_dir'] ?? './log/debug/stream/'
@@ -246,7 +253,7 @@ $streamHandlerParams = [
 // 开始提问
 $chat->qa([
     'system' => "",
-    'question' => "\n\n{$systemPrompt}\n\n{$question}\n\nYour translation:",
+    'question' => $fullPrompt,
     'temperature' => 0,
     'client_ip' => $clientIp,
     'stream_handler_params' => $streamHandlerParams
